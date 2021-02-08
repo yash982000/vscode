@@ -107,10 +107,13 @@ export class TypeScriptVersionManager extends Disposable {
 				description: version.displayName,
 				detail: version.pathLabel,
 				run: async () => {
-					await this.workspaceState.update(useWorkspaceTsdkStorageKey, true);
-					const tsConfig = vscode.workspace.getConfiguration('typescript');
-					await tsConfig.update('tsdk', version.pathLabel, false);
-					this.updateActiveVersion(version);
+					const trustState = await vscode.workspace.requireWorkspaceTrust();
+					if (trustState === vscode.WorkspaceTrustState.Trusted) {
+						await this.workspaceState.update(useWorkspaceTsdkStorageKey, true);
+						const tsConfig = vscode.workspace.getConfiguration('typescript');
+						await tsConfig.update('tsdk', version.pathLabel, false);
+						this.updateActiveVersion(version);
+					}
 				},
 			};
 		});
