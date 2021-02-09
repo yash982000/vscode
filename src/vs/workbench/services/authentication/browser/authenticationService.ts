@@ -22,7 +22,7 @@ import { ExtensionsRegistry } from 'vs/workbench/services/extensions/common/exte
 import { IJSONSchema } from 'vs/base/common/jsonSchema';
 import { flatten } from 'vs/base/common/arrays';
 import { isFalsyOrWhitespace } from 'vs/base/common/strings';
-import { IExtensionService } from 'vs/workbench/services/extensions/common/extensions';
+import { ActivationKind, IExtensionService } from 'vs/workbench/services/extensions/common/extensions';
 import { IDialogService } from 'vs/platform/dialogs/common/dialogs';
 import { Severity } from 'vs/platform/notification/common/notification';
 import { IQuickInputService } from 'vs/platform/quickinput/common/quickInput';
@@ -666,17 +666,7 @@ export class AuthenticationService extends Disposable implements IAuthentication
 				});
 			}
 
-			this._accountBadgeDisposable.clear();
-
-			let numberOfRequests = 0;
-			this._signInRequestItems.forEach(providerRequests => {
-				Object.keys(providerRequests).forEach(request => {
-					numberOfRequests += providerRequests[request].requestingExtensionIds.length;
-				});
-			});
-
-			const badge = new NumberBadge(numberOfRequests, () => nls.localize('sign in', "Sign in requested"));
-			this._accountBadgeDisposable.value = this.activityService.showAccountsActivity({ badge });
+			this.updateBadgeCount();
 		}
 	}
 	getLabel(id: string): string {
@@ -698,7 +688,7 @@ export class AuthenticationService extends Disposable implements IAuthentication
 	}
 
 	private async tryActivateProvider(providerId: string): Promise<MainThreadAuthenticationProvider> {
-		await this.extensionService.activateByEvent(getAuthenticationProviderActivationEvent(providerId));
+		await this.extensionService.activateByEvent(getAuthenticationProviderActivationEvent(providerId), ActivationKind.Immediate);
 		let provider = this._authenticationProviders.get(providerId);
 		if (provider) {
 			return provider;
