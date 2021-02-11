@@ -65,7 +65,46 @@ export class ReleaseNotesManager {
 		accessor: ServicesAccessor,
 		version: string
 	): Promise<boolean> {
-		const releaseNoteText = await this.loadReleaseNotes(version);
+		const releaseNoteText = false ? await this.loadReleaseNotes(version) : `
+
+		# January 2021 (version 1.53)
+
+**Update 1.53.1**: The update addresses these security [issues](https://github.com/microsoft/vscode/milestone/143).
+
+<!-- DOWNLOAD_LINKS_PLACEHOLDER -->
+
+---
+
+Welcome to the January 2021 release of Visual Studio Code. There are a number of updates in this version that we hope you will like, some of the key highlights include:
+
+* **[Wrap tabs](#wrap-tabs)** - Wrap editor tabs in the workbench instead of having a scrollbar.
+* **[Configure tab decorations](#tab-decorations)** - Add editor tab status decorations.
+* **[Customize search mode](#default-search-mode)** - Use the Search view or open a new Search editor.
+* **[JavaScript debugging](#javascript-debugger)** - Support for conditional exception breakpoints and Node.js worker_threads.
+* **[Notebook UX updates](#notebooks)** - Outline view for Notebook cells, and breadcrumbs for improved navigation.
+* **[Markdown preview image auto update](#markdown-preview-auto-updates-when-images-are-changed-on-disk)** - Preview automatically updates when images change.
+* **[Emmet improvements](#emmet-performance-and-feature-improvements)** - Faster performance and supporting the latest features.
+* **[Extension guidelines](#extension-guidelines)** - Documented best practices for extension authors.
+* **[Remote Development video series](#documentation)** - Learn to create and configure container-based environments.
+
+>If you'd like to read these release notes online, go to [Updates](https://code.visualstudio.com/updates) on [code.visualstudio.com](https://code.visualstudio.com).
+
+**Join us live** at the [VS Code team's livestream](https://code.visualstudio.com/livestream) on Tuesday, February 9 at 8am Pacific (4pm London) to see a demo of what's new in this release, and ask us questions live.
+
+**Insiders:** Want to try new features as soon as possible? You can download the nightly [Insiders](https://code.visualstudio.com/insiders) build and try the latest updates as soon as they are available.
+
+## Workbench
+
+### Wrap tabs
+
+A new setting 'workbench.editor.wrapTabs' lets editor tabs wrap instead of showing a scrollbar.
+
+![Wrapping tabs in editor](images/1_53/tabs-wrap.gif)
+*Theme: [GitHub Dark Theme](https://marketplace.visualstudio.com/items?itemName=GitHub.github-vscode-theme)*
+
+If the available space for the tabs is too small, wrapping will temporarily turn off, and you will see the old experience with a scrollbar.
+		`;
+
 		this._lastText = releaseNoteText;
 		const html = await this.renderBody(releaseNoteText);
 		const title = nls.localize('releaseNotesInputName', "Release Notes: {0}", version);

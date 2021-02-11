@@ -122,3 +122,13 @@ import 'vs/workbench/contrib/userDataSync/electron-sandbox/userDataSync.contribu
 import 'vs/workbench/contrib/output/electron-sandbox/outputChannelModelService';
 
 //#endregion
+
+
+// Webview
+// eslint-disable-next-line code-import-patterns
+import 'vs/workbench/contrib/webview/electron-browser/webview.contribution';
+
+
+// Notebook
+// eslint-disable-next-line code-import-patterns
+import 'vs/workbench/contrib/notebook/electron-browser/notebook.contribution';

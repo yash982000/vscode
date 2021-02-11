@@ -108,9 +108,6 @@ import 'vs/workbench/contrib/splash/electron-browser/partsSplash.contribution';
 // Debug
 import 'vs/workbench/contrib/debug/node/debugHelperService';
 
-// Webview
-import 'vs/workbench/contrib/webview/electron-browser/webview.contribution';
-
 
 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //
@@ -124,8 +121,6 @@ import 'vs/workbench/contrib/webview/electron-browser/webview.contribution';
 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 
-// Notebook
-import 'vs/workbench/contrib/notebook/electron-browser/notebook.contribution';
 
 // Extensions Management
 import 'vs/workbench/contrib/extensions/electron-browser/extensions.contribution';
