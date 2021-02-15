@@ -4,6 +4,19 @@
 			"component": {
 				"type": "git",
 				"git": {
+					"name": "vscode-references-view",
+					"repositoryUrl": "https://github.com/microsoft/vscode-references-view",
+					"commitHash": "f1b526b39c97981c81d52a98d6e66f8f699dc38a"
+				}
+			},
+			"license": "MIT",
+			"isOnlyProductionDependency": true,
+			"version": "0.0.77"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
 					"name": "chromium",
 					"repositoryUrl": "https://chromium.googlesource.com/chromium/src",
 					"commitHash": "c0dfcf99c0bbc9c4763c70e5034eb1a970a9ff3b"
