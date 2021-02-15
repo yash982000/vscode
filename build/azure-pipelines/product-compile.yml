@@ -1,4 +1,9 @@
 steps:
+  - script: |
+      set -e
+      git clone https://github.com/microsoft/vscode-references-view.git
+    workingDirectory: $(Agent.BuildDirectory)
+
   - task: NodeTool@0
     inputs:
       versionSpec: "12.x"
