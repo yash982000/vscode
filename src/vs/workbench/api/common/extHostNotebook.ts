@@ -9,7 +9,7 @@ import { Disposable, DisposableStore } from 'vs/base/common/lifecycle';
 import { URI, UriComponents } from 'vs/base/common/uri';
 import * as UUID from 'vs/base/common/uuid';
 import { IExtensionDescription } from 'vs/platform/extensions/common/extensions';
-import { ExtHostNotebookShape, ICommandDto, IMainContext, IModelAddedData, INotebookDocumentPropertiesChangeData, INotebookDocumentsAndEditorsDelta, INotebookDocumentShowOptions, INotebookEditorPropertiesChangeData, MainContext, MainThreadBulkEditsShape, MainThreadNotebookShape } from 'vs/workbench/api/common/extHost.protocol';
+import { ExtHostNotebookShape, ICommandDto, IMainContext, IModelAddedData, INotebookDocumentPropertiesChangeData, INotebookDocumentsAndEditorsDelta, INotebookDocumentShowOptions, INotebookEditorPropertiesChangeData, INotebookKernelInfoDto2, MainContext, MainThreadNotebookShape } from 'vs/workbench/api/common/extHost.protocol';
 import { ILogService } from 'vs/platform/log/common/log';
 import { CommandsConverter, ExtHostCommands } from 'vs/workbench/api/common/extHostCommands';
 import { ExtHostDocumentsAndEditors } from 'vs/workbench/api/common/extHostDocumentsAndEditors';
@@ -17,7 +17,7 @@ import { IExtensionStoragePaths } from 'vs/workbench/api/common/extHostStoragePa
 import * as typeConverters from 'vs/workbench/api/common/extHostTypeConverters';
 import * as extHostTypes from 'vs/workbench/api/common/extHostTypes';
 import { asWebviewUri, WebviewInitData } from 'vs/workbench/api/common/shared/webview';
-import { addIdToOutput, CellStatusbarAlignment, CellUri, INotebookCellStatusBarEntry, INotebookDisplayOrder, INotebookExclusiveDocumentFilter, INotebookKernelInfoDto2, NotebookCellMetadata, NotebookCellsChangedEventDto, NotebookCellsChangeType, NotebookDataDto, notebookDocumentMetadataDefaults } from 'vs/workbench/contrib/notebook/common/notebookCommon';
+import { CellStatusbarAlignment, CellUri, INotebookCellStatusBarEntry, INotebookDisplayOrder, INotebookExclusiveDocumentFilter, NotebookCellMetadata, NotebookCellsChangedEventDto, NotebookCellsChangeType, NotebookDataDto, notebookDocumentMetadataDefaults } from 'vs/workbench/contrib/notebook/common/notebookCommon';
 import * as vscode from 'vscode';
 import { ResourceMap } from 'vs/base/common/map';
 import { ExtHostCell, ExtHostNotebookDocument } from './extHostNotebookDocument';
@@ -123,10 +123,12 @@ export class ExtHostNotebookKernelProviderAdapter extends Disposable {
 				label: kernel.label,
 				extension: this._extension.identifier,
 				extensionLocation: this._extension.extensionLocation,
+				providerHandle: this._handle,
 				description: kernel.description,
 				detail: kernel.detail,
 				isPreferred: kernel.isPreferred,
-				preloads: kernel.preloads
+				preloads: kernel.preloads,
+				supportedLanguages: kernel.supportedLanguages
 			};
 		});
 
@@ -214,7 +216,6 @@ export class ExtHostNotebookController implements ExtHostNotebookShape, ExtHostN
 	private static _notebookKernelProviderHandlePool: number = 0;
 
 	private readonly _proxy: MainThreadNotebookShape;
-	private readonly _mainThreadBulkEdits: MainThreadBulkEditsShape;
 	private readonly _notebookContentProviders = new Map<string, { readonly provider: vscode.NotebookContentProvider, readonly extension: IExtensionDescription; }>();
 	private readonly _notebookKernelProviders = new Map<number, ExtHostNotebookKernelProviderAdapter>();
 	private readonly _documents = new ResourceMap<ExtHostNotebookDocument>();
@@ -271,7 +272,6 @@ export class ExtHostNotebookController implements ExtHostNotebookShape, ExtHostN
 		private readonly _extensionStoragePaths: IExtensionStoragePaths,
 	) {
 		this._proxy = mainContext.getProxy(MainContext.MainThreadNotebook);
-		this._mainThreadBulkEdits = mainContext.getProxy(MainContext.MainThreadBulkEdits);
 		this._commandsConverter = commands.converter;
 
 		commands.registerArgumentProcessor({
@@ -404,7 +404,7 @@ export class ExtHostNotebookController implements ExtHostNotebookShape, ExtHostN
 			resolvedOptions = {
 				position: typeConverters.ViewColumn.from(options.viewColumn),
 				preserveFocus: options.preserveFocus,
-				selection: options.selection,
+				selection: options.selection && typeConverters.NotebookCellRange.from(options.selection),
 				pinned: typeof options.preview === 'boolean' ? !options.preview : undefined
 			};
 		} else {
@@ -443,7 +443,7 @@ export class ExtHostNotebookController implements ExtHostNotebookShape, ExtHostN
 		});
 	}
 
-	async $resolveNotebookData(viewType: string, uri: UriComponents, backupId?: string): Promise<NotebookDataDto> {
+	async $openNotebook(viewType: string, uri: UriComponents, backupId?: string): Promise<NotebookDataDto> {
 		const provider = this._notebookContentProviders.get(viewType);
 		if (!provider) {
 			throw new Error(`NO provider for '${viewType}'`);
@@ -455,11 +455,7 @@ export class ExtHostNotebookController implements ExtHostNotebookShape, ExtHostN
 				...notebookDocumentMetadataDefaults,
 				...data.metadata
 			},
-			languages: data.languages,
-			cells: data.cells.map(cell => ({
-				...cell,
-				outputs: cell.outputs.map(o => addIdToOutput(o))
-			})),
+			cells: data.cells.map(typeConverters.NotebookCellData.from),
 		};
 	}
 
@@ -583,7 +579,14 @@ export class ExtHostNotebookController implements ExtHostNotebookShape, ExtHostN
 		}
 	}
 
-	public $acceptModelSaved(uriComponents: UriComponents): void {
+	$acceptDirtyStateChanged(resource: UriComponents, isDirty: boolean): void {
+		const document = this._documents.get(URI.revive(resource));
+		if (document) {
+			document.acceptModelChanged({ rawEvents: [], versionId: document.notebookDocument.version }, isDirty);
+		}
+	}
+
+	$acceptModelSaved(uriComponents: UriComponents): void {
 		const document = this._documents.get(URI.revive(uriComponents));
 		if (document) {
 			// this.$acceptDirtyStateChanged(uriComponents, false);
@@ -606,7 +609,7 @@ export class ExtHostNotebookController implements ExtHostNotebookShape, ExtHostN
 		}
 
 		if (data.visibleRanges) {
-			editor.editor._acceptVisibleRanges(data.visibleRanges.ranges);
+			editor.editor._acceptVisibleRanges(data.visibleRanges.ranges.map(typeConverters.NotebookCellRange.to));
 			this._onDidChangeNotebookEditorVisibleRanges.fire({
 				notebookEditor: editor.editor,
 				visibleRanges: editor.editor.visibleRanges
@@ -641,7 +644,7 @@ export class ExtHostNotebookController implements ExtHostNotebookShape, ExtHostN
 		}
 	}
 
-	private _createExtHostEditor(document: ExtHostNotebookDocument, editorId: string, selections: number[], visibleRanges: vscode.NotebookCellRange[]) {
+	private _createExtHostEditor(document: ExtHostNotebookDocument, editorId: string, selections: number[], visibleRanges: extHostTypes.NotebookCellRange[]) {
 		const revivedUri = document.uri;
 		let webComm = this._webviewComm.get(editorId);
 
@@ -711,7 +714,7 @@ export class ExtHostNotebookController implements ExtHostNotebookShape, ExtHostN
 				}
 				const that = this;
 
-				const document = new ExtHostNotebookDocument(this._proxy, this._documentsAndEditors, this._mainThreadBulkEdits, {
+				const document = new ExtHostNotebookDocument(this._documentsAndEditors, {
 					emitModelChange(event: vscode.NotebookCellsChangeEvent): void {
 						that._onDidChangeNotebookCells.fire(event);
 					},
@@ -727,7 +730,7 @@ export class ExtHostNotebookController implements ExtHostNotebookShape, ExtHostN
 					emitDocumentMetadataChange(event: vscode.NotebookDocumentMetadataChangeEvent): void {
 						that._onDidChangeNotebookDocumentMetadata.fire(event);
 					}
-				}, viewType, modelData.contentOptions, { ...notebookDocumentMetadataDefaults, ...modelData.metadata }, uri, storageRoot);
+				}, viewType, modelData.contentOptions, typeConverters.NotebookDocumentMetadata.to(modelData.metadata ?? {}), uri, storageRoot);
 
 				document.acceptModelChanged({
 					versionId: modelData.versionId,
@@ -751,7 +754,7 @@ export class ExtHostNotebookController implements ExtHostNotebookShape, ExtHostN
 
 				// create editor if populated
 				if (modelData.attachedEditor) {
-					this._createExtHostEditor(document, modelData.attachedEditor.id, modelData.attachedEditor.selections, modelData.attachedEditor.visibleRanges);
+					this._createExtHostEditor(document, modelData.attachedEditor.id, modelData.attachedEditor.selections, modelData.attachedEditor.visibleRanges.map(typeConverters.NotebookCellRange.to));
 					editorChanged = true;
 				}
 
@@ -771,7 +774,7 @@ export class ExtHostNotebookController implements ExtHostNotebookShape, ExtHostN
 				const document = this._documents.get(revivedUri);
 
 				if (document) {
-					this._createExtHostEditor(document, editorModelData.id, editorModelData.selections, editorModelData.visibleRanges);
+					this._createExtHostEditor(document, editorModelData.id, editorModelData.selections, editorModelData.visibleRanges.map(typeConverters.NotebookCellRange.to));
 					editorChanged = true;
 				}
 			}

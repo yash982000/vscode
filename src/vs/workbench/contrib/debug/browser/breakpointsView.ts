@@ -465,7 +465,7 @@ class ExceptionBreakpointsRenderer implements IListRenderer<IExceptionBreakpoint
 	renderElement(exceptionBreakpoint: IExceptionBreakpoint, index: number, data: IExceptionBreakpointTemplateData): void {
 		data.context = exceptionBreakpoint;
 		data.name.textContent = exceptionBreakpoint.label || `${exceptionBreakpoint.filter} exceptions`;
-		data.breakpoint.title = data.name.textContent;
+		data.breakpoint.title = exceptionBreakpoint.description || data.name.textContent;
 		data.checkbox.checked = exceptionBreakpoint.enabled;
 		data.condition.textContent = exceptionBreakpoint.condition || '';
 		data.condition.title = localize('expressionCondition', "Expression condition: {0}", exceptionBreakpoint.condition);
@@ -688,9 +688,7 @@ class FunctionBreakpointInputRenderer implements IListRenderer<IFunctionBreakpoi
 		toDispose.push(dom.addDisposableListener(inputBox.inputElement, 'blur', () => {
 			// Need to react with a timeout on the blur event due to possible concurent splices #56443
 			setTimeout(() => {
-				if (!template.breakpoint.name) {
-					wrapUp(true);
-				}
+				wrapUp(!!inputBox.value);
 			});
 		}));
 
@@ -763,7 +761,6 @@ class ExceptionBreakpointInputRenderer implements IListRenderer<IExceptionBreakp
 		this.view.breakpointInputFocused.set(true);
 		const inputBoxContainer = dom.append(breakpoint, $('.inputBoxContainer'));
 		const inputBox = new InputBox(inputBoxContainer, this.contextViewService, {
-			placeholder: localize('exceptionBreakpointPlaceholder', "Break when expression evaluates to true"),
 			ariaLabel: localize('exceptionBreakpointAriaLabel', "Type exception breakpoint condition")
 		});
 		const styler = attachInputBoxStyler(inputBox, this.themeService);
@@ -800,6 +797,8 @@ class ExceptionBreakpointInputRenderer implements IListRenderer<IExceptionBreakp
 	}
 
 	renderElement(exceptionBreakpoint: ExceptionBreakpoint, _index: number, data: IExceptionBreakpointInputTemplateData): void {
+		const placeHolder = exceptionBreakpoint.conditionDescription || localize('exceptionBreakpointPlaceholder', "Break when expression evaluates to true");
+		data.inputBox.setPlaceHolder(placeHolder);
 		data.breakpoint = exceptionBreakpoint;
 		data.checkbox.checked = exceptionBreakpoint.enabled;
 		data.checkbox.disabled = true;
@@ -857,11 +856,11 @@ export function openBreakpointSource(breakpoint: IBreakpoint, sideBySide: boolea
 		startColumn: breakpoint.column || 1,
 		endColumn: breakpoint.endColumn || Constants.MAX_SAFE_SMALL_INTEGER
 	} : {
-			startLineNumber: breakpoint.lineNumber,
-			startColumn: breakpoint.column || 1,
-			endLineNumber: breakpoint.lineNumber,
-			endColumn: breakpoint.column || Constants.MAX_SAFE_SMALL_INTEGER
-		};
+		startLineNumber: breakpoint.lineNumber,
+		startColumn: breakpoint.column || 1,
+		endLineNumber: breakpoint.lineNumber,
+		endColumn: breakpoint.column || Constants.MAX_SAFE_SMALL_INTEGER
+	};
 
 	return editorService.openEditor({
 		resource: breakpoint.uri,
