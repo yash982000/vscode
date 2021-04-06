@@ -27,6 +27,9 @@ import { IQuickInputOptions } from 'vs/base/parts/quickinput/browser/quickInput'
 import { IListOptions, List, IListStyles, IListAccessibilityProvider } from 'vs/base/browser/ui/list/listWidget';
 import { KeybindingLabel } from 'vs/base/browser/ui/keybindingLabel/keybindingLabel';
 import { localize } from 'vs/nls';
+import { IThemable } from 'vs/base/common/styler';
+import { Color, RGBA } from 'vs/base/common/color';
+import { mixin } from 'vs/base/common/objects';
 
 const $ = dom.$;
 
@@ -95,18 +98,39 @@ interface IListElementTemplateData {
 	toDisposeTemplate: IDisposable[];
 }
 
-class ListElementRenderer implements IListRenderer<ListElement, IListElementTemplateData> {
+export interface IListElementRendererStyles {
+	keybindingLabelBackground?: Color;
+	keybindingLabelForeground?: Color;
+}
 
+class ListElementRenderer implements IListRenderer<ListElement, IListElementTemplateData>, IThemable {
 	static readonly ID = 'listelement';
+
+	static defaultOpts: IListElementRendererStyles = {
+		keybindingLabelBackground: new Color(new RGBA(221, 221, 221, 0.4)),
+		keybindingLabelForeground: Color.fromHex('#555555')
+	};
+
+	private listStyleSheet: HTMLStyleElement | undefined;
 
 	get templateId() {
 		return ListElementRenderer.ID;
+	}
+
+	constructor(private styles?: IListElementRendererStyles) {
+		this.styles = styles || {};
+		mixin(this.styles, ListElementRenderer.defaultOpts, false);
 	}
 
 	renderTemplate(container: HTMLElement): IListElementTemplateData {
 		const data: IListElementTemplateData = Object.create(null);
 		data.toDisposeElement = [];
 		data.toDisposeTemplate = [];
+
+		if (!this.listStyleSheet) {
+			this.listStyleSheet = dom.createStyleSheet(container);
+			this.applyStyles();
+		}
 
 		data.entry = dom.append(container, $('.quick-input-list-entry'));
 
@@ -215,6 +239,30 @@ class ListElementRenderer implements IListRenderer<ListElement, IListElementTemp
 		data.toDisposeElement = dispose(data.toDisposeElement);
 		data.toDisposeTemplate = dispose(data.toDisposeTemplate);
 	}
+
+	style(styles: IListElementRendererStyles): void {
+		this.styles = styles;
+		this.applyStyles();
+	}
+
+	private applyStyles() {
+		if (!this.listStyleSheet) {
+			return;
+		}
+
+		const content: string[] = [];
+		if (this.styles?.keybindingLabelBackground) {
+			content.push(`.monaco-keybinding > .monaco-keybinding-key { background-color: ${this.styles.keybindingLabelBackground}; }`);
+		}
+		if (this.styles?.keybindingLabelForeground) {
+			content.push(`.monaco-keybinding > .monaco-keybinding-key { color: ${this.styles.keybindingLabelForeground}; }`);
+		}
+
+		const newStyles = content.join('\n');
+		if (newStyles !== this.listStyleSheet.textContent) {
+			this.listStyleSheet.textContent = newStyles;
+		}
+	}
 }
 
 class ListElementDelegate implements IListVirtualDelegate<ListElement> {
@@ -238,7 +286,7 @@ export enum QuickInputListFocus {
 	PreviousPage
 }
 
-export class QuickInputList {
+export class QuickInputList implements IThemable {
 
 	readonly id: string;
 	private container: HTMLElement;
@@ -268,6 +316,7 @@ export class QuickInputList {
 	private _fireCheckedEvents = true;
 	private elementDisposables: IDisposable[] = [];
 	private disposables: IDisposable[] = [];
+	private _listElementRenderer: ListElementRenderer;
 
 	constructor(
 		private parent: HTMLElement,
@@ -278,7 +327,8 @@ export class QuickInputList {
 		this.container = dom.append(this.parent, $('.quick-input-list'));
 		const delegate = new ListElementDelegate();
 		const accessibilityProvider = new QuickInputAccessibilityProvider();
-		this.list = options.createList('QuickInput', this.container, delegate, [new ListElementRenderer()], {
+		this._listElementRenderer = new ListElementRenderer(options.styles.list);
+		this.list = options.createList('QuickInput', this.container, delegate, [this._listElementRenderer], {
 			identityProvider: { getId: element => element.saneLabel },
 			setRowLineHeight: false,
 			multipleSelectionSupport: false,
@@ -687,7 +737,8 @@ export class QuickInputList {
 		this._onButtonTriggered.fire(event);
 	}
 
-	style(styles: IListStyles) {
+	style(styles: IListStyles & IListElementRendererStyles) {
+		this._listElementRenderer.style(styles);
 		this.list.style(styles);
 	}
 }
