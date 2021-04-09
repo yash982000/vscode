@@ -25,6 +25,8 @@ const { getUserDataPath } = require('./vs/platform/environment/node/userDataPath
 const product = require('../product.json');
 const { app, protocol, crashReporter } = require('electron');
 
+app.allowRendererProcessReuse = true;
+
 // Enable portable support
 const portable = bootstrapNode.configurePortable(product);
 
@@ -174,7 +176,6 @@ function configureCommandlineSwitchesSync(cliArgs) {
 	const argvConfig = readArgvConfigSync();
 
 	let browserCodeLoadingStrategy = undefined;
-	let enableRenderProcessReuse = true;
 
 	Object.keys(argvConfig).forEach(argvKey => {
 		const argvValue = argvConfig[argvKey];
@@ -226,14 +227,14 @@ function configureCommandlineSwitchesSync(cliArgs) {
 
 				case 'enable-render-process-reuse':
 					if (argvValue === false) {
-						enableRenderProcessReuse = false;
+						app.allowRendererProcessReuse = false;
+					} else {
+						app.allowRendererProcessReuse = true;
 					}
 					break;
 			}
 		}
 	});
-
-	app.allowRendererProcessReuse = enableRenderProcessReuse;
 
 	// Support JS Flags
 	const jsFlags = getJSFlags(cliArgs);
