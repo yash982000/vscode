@@ -25,9 +25,11 @@ const { getUserDataPath } = require('./vs/platform/environment/node/userDataPath
 const product = require('../product.json');
 const { app, protocol, crashReporter } = require('electron');
 
-// Disable render process reuse, we still have
-// non-context aware native modules in the renderer.
-app.allowRendererProcessReuse = false;
+// Parse args
+const args = parseCLIArgs();
+
+// Configure process reuse, see https://github.com/electron/electron/issues/18397
+configureProcessReuse(args);
 
 // Enable portable support
 const portable = bootstrapNode.configurePortable(product);
@@ -36,7 +38,6 @@ const portable = bootstrapNode.configurePortable(product);
 bootstrap.enableASARSupport(undefined);
 
 // Set userData path before app 'ready' event
-const args = parseCLIArgs();
 const userDataPath = getUserDataPath(args);
 app.setPath('userData', userDataPath);
 
@@ -454,6 +455,18 @@ function parseCLIArgs() {
 			'crash-reporter-directory'
 		]
 	});
+}
+
+/**
+ * @param {NativeParsedArgs} args
+ */
+function configureProcessReuse(args) {
+	const disableProcessReuse = args['disable-process-reuse'];
+	if (disableProcessReuse === true || disableProcessReuse === 'true') {
+		app.allowRendererProcessReuse = false;
+	} else {
+		app.allowRendererProcessReuse = true;
+	}
 }
 
 function registerListeners() {
