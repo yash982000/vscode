@@ -25,12 +25,6 @@ const { getUserDataPath } = require('./vs/platform/environment/node/userDataPath
 const product = require('../product.json');
 const { app, protocol, crashReporter } = require('electron');
 
-// Parse args
-const args = parseCLIArgs();
-
-// Configure process reuse, see https://github.com/electron/electron/issues/18397
-configureProcessReuse(args);
-
 // Enable portable support
 const portable = bootstrapNode.configurePortable(product);
 
@@ -38,6 +32,7 @@ const portable = bootstrapNode.configurePortable(product);
 bootstrap.enableASARSupport(undefined);
 
 // Set userData path before app 'ready' event
+const args = parseCLIArgs();
 const userDataPath = getUserDataPath(args);
 app.setPath('userData', userDataPath);
 
@@ -169,13 +164,17 @@ function configureCommandlineSwitchesSync(cliArgs) {
 		'enable-browser-code-loading',
 
 		// Log level to use. Default is 'info'. Allowed values are 'critical', 'error', 'warn', 'info', 'debug', 'trace', 'off'.
-		'log-level'
+		'log-level',
+
+		// Enables render process reuse. Default value is 'true'. See https://github.com/electron/electron/issues/18397
+		'enable-render-process-reuse'
 	];
 
 	// Read argv config
 	const argvConfig = readArgvConfigSync();
 
 	let browserCodeLoadingStrategy = undefined;
+	let enableRenderProcessReuse = true;
 
 	Object.keys(argvConfig).forEach(argvKey => {
 		const argvValue = argvConfig[argvKey];
@@ -224,9 +223,17 @@ function configureCommandlineSwitchesSync(cliArgs) {
 						process.argv.push('--log', argvValue);
 					}
 					break;
+
+				case 'enable-render-process-reuse':
+					if (argvValue === false) {
+						enableRenderProcessReuse = false;
+					}
+					break;
 			}
 		}
 	});
+
+	app.allowRendererProcessReuse = enableRenderProcessReuse;
 
 	// Support JS Flags
 	const jsFlags = getJSFlags(cliArgs);
@@ -455,18 +462,6 @@ function parseCLIArgs() {
 			'crash-reporter-directory'
 		]
 	});
-}
-
-/**
- * @param {NativeParsedArgs} args
- */
-function configureProcessReuse(args) {
-	const disableProcessReuse = args['disable-process-reuse'];
-	if (disableProcessReuse === true || disableProcessReuse === 'true') {
-		app.allowRendererProcessReuse = false;
-	} else {
-		app.allowRendererProcessReuse = true;
-	}
 }
 
 function registerListeners() {
