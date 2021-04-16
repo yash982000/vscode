@@ -11,7 +11,6 @@ import { ITerminalService, TerminalConnectionState } from 'vs/workbench/contrib/
 import { TerminalFindWidget } from 'vs/workbench/contrib/terminal/browser/terminalFindWidget';
 import { DEFAULT_TABS_WIDGET_WIDTH, MIDPOINT_WIDGET_WIDTH, MIN_TABS_WIDGET_WIDTH, TerminalTabsWidget } from 'vs/workbench/contrib/terminal/browser/terminalTabsWidget';
 import { IThemeService, IColorTheme } from 'vs/platform/theme/common/themeService';
-import * as nls from 'vs/nls';
 import { isLinux, isMacintosh } from 'vs/base/common/platform';
 import * as dom from 'vs/base/browser/dom';
 import { BrowserFeatures } from 'vs/base/browser/canIUse';
@@ -27,7 +26,11 @@ import { IContextMenuService } from 'vs/platform/contextview/browser/contextView
 import { KEYBINDING_CONTEXT_TERMINAL_FIND_VISIBLE, TERMINAL_COMMAND_ID } from 'vs/workbench/contrib/terminal/common/terminal';
 import { IStorageService, StorageScope, StorageTarget } from 'vs/platform/storage/common/storage';
 import { Codicon } from 'vs/base/common/codicons';
-import { ToolBar } from 'vs/base/browser/ui/toolbar/toolbar';
+import { ButtonBar } from 'vs/base/browser/ui/button/button';
+import { ContextMenuTabsGroup } from 'vs/workbench/contrib/terminal/browser/terminalActions';
+import { localize } from 'vs/nls';
+import { ICommandService } from 'vs/platform/commands/common/commands';
+import { attachButtonStyler } from 'vs/platform/theme/common/styler';
 
 const $ = dom.$;
 
@@ -43,6 +46,7 @@ export class TerminalTabbedView extends Disposable {
 	private _terminalTabTree: HTMLElement;
 	private _parentElement: HTMLElement;
 	private _tabTreeContainer: HTMLElement;
+	private _buttonContainer: HTMLElement;
 
 	private _tabsWidget: TerminalTabsWidget;
 	private _findWidget: TerminalFindWidget;
@@ -63,17 +67,20 @@ export class TerminalTabbedView extends Disposable {
 	private _instanceMenu: IMenu;
 	// private _dropdownMenu: IMenu;
 
+	private _buttonToolbar: ButtonBar;
+
 	constructor(
 		parentElement: HTMLElement,
 		@ITerminalService private readonly _terminalService: ITerminalService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@INotificationService private readonly _notificationService: INotificationService,
 		@IContextMenuService private readonly _contextMenuService: IContextMenuService,
-		@IThemeService private readonly _themeService: IThemeService,
 		@IConfigurationService configurationService: IConfigurationService,
-		@IContextKeyService contextKeyService: IContextKeyService,
+		@IContextKeyService private readonly _contextKeyService: IContextKeyService,
 		@IMenuService menuService: IMenuService,
-		@IStorageService private readonly _storageService: IStorageService
+		@IStorageService private readonly _storageService: IStorageService,
+		@ICommandService private readonly _commandService: ICommandService,
+		@IThemeService private readonly _themeService: IThemeService
 	) {
 		super();
 
@@ -85,8 +92,7 @@ export class TerminalTabbedView extends Disposable {
 		tabWidgetContainer.appendChild(this._terminalTabTree);
 		this._tabTreeContainer.appendChild(tabWidgetContainer);
 
-		this._instanceMenu = this._register(menuService.createMenu(MenuId.TerminalContext, contextKeyService));
-		// this._dropdownMenu = this._register(menuService.createMenu(MenuId.TerminalTabsContext, contextKeyService));
+		this._instanceMenu = this._register(menuService.createMenu(MenuId.TerminalContext, _contextKeyService));
 
 		this._register(this._tabsWidget = this._instantiationService.createInstance(TerminalTabsWidget, this._terminalTabTree));
 		this._register(this._findWidget = this._instantiationService.createInstance(TerminalFindWidget, this._terminalService.getFindState()));
@@ -101,7 +107,7 @@ export class TerminalTabbedView extends Disposable {
 		this._tabTreeIndex = this._terminalService.configHelper.config.tabsLocation === 'left' ? 0 : 1;
 		this._terminalContainerIndex = this._terminalService.configHelper.config.tabsLocation === 'left' ? 1 : 0;
 
-		this._findWidgetVisible = KEYBINDING_CONTEXT_TERMINAL_FIND_VISIBLE.bindTo(contextKeyService);
+		this._findWidgetVisible = KEYBINDING_CONTEXT_TERMINAL_FIND_VISIBLE.bindTo(_contextKeyService);
 
 		this._terminalService.setContainers(parentElement, this._terminalContainer);
 
@@ -109,8 +115,8 @@ export class TerminalTabbedView extends Disposable {
 			if (e.affectsConfiguration('terminal.integrated.showTabs')) {
 				this._showTabs = this._terminalService.configHelper.config.showTabs;
 				if (this._showTabs) {
-					this._addTabTree();
 					this._addSashListener();
+					this._addTabTree();
 				} else {
 					this._splitView.removeView(this._tabTreeIndex);
 					if (this._plusButton) {
@@ -136,7 +142,15 @@ export class TerminalTabbedView extends Disposable {
 
 		this._splitView = new SplitView(parentElement, { orientation: Orientation.HORIZONTAL, proportionalLayout: false });
 
+		this._buttonContainer = document.createElement('div');
+		this._buttonContainer.classList.add('button-container');
+		this._tabTreeContainer.appendChild(this._buttonContainer);
+		this._buttonToolbar = this._register(new ButtonBar(this._buttonContainer));
+
 		this._setupSplitView();
+
+		this._terminalService.onProfilesConfigChanged(async () => await this._updateProfileButton());
+		this._terminalService.onRequestAvailableProfiles(async () => await this._updateProfileButton());
 	}
 
 	private _getLastWidgetWidth(): number {
@@ -248,12 +262,47 @@ export class TerminalTabbedView extends Disposable {
 	}
 
 	private _createButton(): void {
-		const toolBar = new ToolBar(this._tabTreeContainer, this._contextMenuService);
-		toolBar.setActions([
-			this._instantiationService.createInstance(MenuItemAction, { id: TERMINAL_COMMAND_ID.NEW, title: nls.localize('terminal.new', "New Terminal"), icon: Codicon.plus }, undefined, undefined),
-			// TODO: Bring back context menu: await this._openTabsContextMenu(e);
-			this._instantiationService.createInstance(MenuItemAction, { id: TERMINAL_COMMAND_ID.NEW_WITH_PROFILE, title: nls.localize('terminal.newWithProfile', "New Terminal With Profile"), icon: Codicon.chevronDown }, undefined, undefined)
-		]);
+		const plusButtonOptions = { title: localize('terminal.new', "New Terminal") };
+		const plusButton = this._register(this._buttonToolbar.addButton({
+			...plusButtonOptions
+		}));
+		const action = new MenuItemAction({ id: TERMINAL_COMMAND_ID.NEW, title: 'New Terminal' }, undefined, undefined, this._contextKeyService, this._commandService);
+		plusButton.icon = Codicon.plus;
+		plusButton.onDidClick(e => {
+			if (e) {
+				dom.EventHelper.stop(e, true);
+			}
+			action.run();
+		});
+		attachButtonStyler(plusButton, this._themeService);
+	}
+
+	private async _updateProfileButton(): Promise<void> {
+		if (this._buttonToolbar) {
+			const actions: IAction[] = [];
+
+			const profiles = await this._terminalService.getAvailableProfiles();
+			for (const p of profiles) {
+				const action = new MenuItemAction({ id: TERMINAL_COMMAND_ID.NEW_WITH_PROFILE, title: p.profileName, category: ContextMenuTabsGroup.Profile }, undefined, { arg: p, shouldForwardArgs: true }, this._contextKeyService, this._commandService);
+				actions.push(action);
+			}
+			const profileButtonOptions = { title: localize('terminal.newWithProfile', "New Terminal With Profile") };
+			if (this._buttonToolbar.buttons.length > 1) {
+				this._buttonToolbar.dispose();
+				this._tabTreeContainer.removeChild(this._buttonContainer);
+				this._buttonContainer = document.createElement('div');
+				this._buttonContainer.classList.add('button-container');
+				this._tabTreeContainer.appendChild(this._buttonContainer);
+				this._buttonToolbar = this._register(new ButtonBar(this._buttonContainer));
+				this._createButton();
+			}
+			const profilesButton = this._register(this._buttonToolbar.addButtonWithDropdown({
+				...profileButtonOptions,
+				contextMenuProvider: this._contextMenuService,
+				actions
+			}));
+			attachButtonStyler(profilesButton, this._themeService);
+		}
 	}
 
 	private _updateTheme(theme?: IColorTheme): void {

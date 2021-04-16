@@ -207,16 +207,20 @@
 	overflow: hidden;
 }
 
-.monaco-workbench .pane-body.integrated-terminal .tabs-container > .monaco-toolbar {
+.monaco-workbench .pane-body.integrated-terminal .tabs-container > .button-container {
+	display: inherit;
+}
+
+.monaco-workbench .pane-body.integrated-terminal .tabs-container > .button-container {
 	padding: 4px 0 2px;
 	margin: auto;
 }
-.monaco-workbench .pane-body.integrated-terminal .tabs-container.has-text > .monaco-toolbar {
+.monaco-workbench .pane-body.integrated-terminal .tabs-container.has-text > .button-container {
 	padding: 4px 7px 2px;
 	margin: 0;
 }
 
-.monaco-workbench .pane-body.integrated-terminal .tabs-container.has-text > .monaco-toolbar {
+.monaco-workbench .pane-body.integrated-terminal .tabs-container.has-text > .button-container {
 	text-align: left;
 }
 
