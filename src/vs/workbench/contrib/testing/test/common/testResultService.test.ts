@@ -40,7 +40,7 @@ suite('Workbench - Test Results Service', () => {
 	};
 
 	class TestLiveTestResult extends LiveTestResult {
-		public setAllToState(state: TestResultState, taskId: string, when: (task: ITestTaskState, item: TestResultItem) => boolean) {
+		public override setAllToState(state: TestResultState, taskId: string, when: (task: ITestTaskState, item: TestResultItem) => boolean) {
 			super.setAllToState(state, taskId, when);
 		}
 	}
@@ -257,6 +257,7 @@ suite('Workbench - Test Results Service', () => {
 			completedAt,
 			id: 'some-id',
 			tasks: [{ id: 't', running: false, name: undefined }],
+			name: 'hello world',
 			items: [{
 				...(await getInitializedMainTestCollection()).getNodeById('id-a')!,
 				tasks: [{ state, duration: 0, messages: [] }],

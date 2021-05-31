@@ -26,16 +26,16 @@ export function activate(context: vscode.ExtensionContext): any {
 				metadata: new vscode.NotebookDocumentMetadata(),
 				cells: [
 					{
-						source: 'code()',
-						language: 'typescript',
+						value: 'code()',
+						languageId: 'typescript',
 						kind: vscode.NotebookCellKind.Code,
 						outputs: [],
 						metadata: new vscode.NotebookCellMetadata().with({ custom: { testCellMetadata: 123 } })
 					},
 					{
-						source: 'Markdown Cell',
-						language: 'markdown',
-						kind: vscode.NotebookCellKind.Markdown,
+						value: 'Markdown Cell',
+						languageId: 'markdown',
+						kind: vscode.NotebookCellKind.Markup,
 						outputs: [],
 						metadata: new vscode.NotebookCellMetadata().with({ custom: { testCellMetadata: 123 } })
 					}
@@ -58,30 +58,24 @@ export function activate(context: vscode.ExtensionContext): any {
 		}
 	}));
 
-	const kernel: vscode.NotebookKernel = {
-		id: 'notebookSmokeTest',
-		label: 'notebookSmokeTest',
-		isPreferred: true,
-		executeCellsRequest: async (document: vscode.NotebookDocument, ranges: vscode.NotebookRange[]) => {
-			const idx = ranges[0].start;
-			const task = vscode.notebook.createNotebookCellExecutionTask(document.uri, idx, 'notebookSmokeTest');
-			if (!task) {
-				return;
-			}
+	const controller = vscode.notebook.createNotebookController(
+		'notebookSmokeTest',
+		'notebookSmokeTest',
+		'notebookSmokeTest'
+	);
 
+	controller.executeHandler = (cells) => {
+		for (const cell of cells) {
+			const task = controller.createNotebookCellExecution(cell);
 			task.start();
 			task.replaceOutput([new vscode.NotebookCellOutput([
-				new vscode.NotebookCellOutputItem('text/html', ['test output'], undefined)
+				vscode.NotebookCellOutputItem.text('test output', 'text/html', undefined)
 			])]);
 			task.end({ success: true });
 		}
 	};
 
-	context.subscriptions.push(vscode.notebook.registerNotebookKernelProvider({ filenamePattern: '*.smoke-nb' }, {
-		provideKernels: async () => {
-			return [kernel];
-		}
-	}));
+	context.subscriptions.push(controller);
 
 	context.subscriptions.push(vscode.commands.registerCommand('vscode-notebook-tests.debugAction', async (cell: vscode.NotebookCell) => {
 		if (cell) {

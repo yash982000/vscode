@@ -4,11 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { DisposableStore, dispose } from 'vs/base/common/lifecycle';
-import { getNotebookEditorFromEditorPane, INotebookEditor, NotebookEditorOptions } from 'vs/workbench/contrib/notebook/browser/notebookBrowser';
+import { getNotebookEditorFromEditorPane, INotebookEditor, INotebookEditorOptions } from 'vs/workbench/contrib/notebook/browser/notebookBrowser';
 import { INotebookEditorService } from 'vs/workbench/contrib/notebook/browser/notebookEditorService';
 import { ExtHostContext, ExtHostNotebookShape, IExtHostContext, INotebookDocumentShowOptions, INotebookEditorViewColumnInfo, MainThreadNotebookEditorsShape, NotebookEditorRevealType } from '../common/extHost.protocol';
 import { MainThreadNotebooksAndEditors } from 'vs/workbench/api/browser/mainThreadNotebookDocumentsAndEditors';
-import { ICellEditOperation, ICellRange, INotebookDecorationRenderOptions } from 'vs/workbench/contrib/notebook/common/notebookCommon';
+import { ICellEditOperation, INotebookDecorationRenderOptions } from 'vs/workbench/contrib/notebook/common/notebookCommon';
+import { ICellRange } from 'vs/workbench/contrib/notebook/common/notebookRange';
 import { ILogService } from 'vs/platform/log/common/log';
 import { URI, UriComponents } from 'vs/base/common/uri';
 import { EditorActivation, EditorOverride } from 'vs/platform/editor/common/editor';
@@ -77,17 +78,6 @@ export class MainThreadNotebookEditors implements MainThreadNotebookEditorsShape
 				this._proxy.$acceptEditorPropertiesChanged(editor.getId(), { selections: { selections: editor.getSelections() } });
 			}));
 
-			editorDisposables.add(editor.onDidChangeKernel(() => {
-				if (!editor.hasModel()) {
-					return;
-				}
-				this._proxy.$acceptNotebookActiveKernelChange({
-					uri: editor.viewModel.uri,
-					providerHandle: editor.activeKernel?.providerHandle,
-					kernelFriendlyId: editor.activeKernel?.friendlyId
-				});
-			}));
-
 			const wrapper = new MainThreadNotebook(editor, editorDisposables);
 			this._mainThreadEditors.set(editor.getId(), wrapper);
 		}
@@ -134,7 +124,7 @@ export class MainThreadNotebookEditors implements MainThreadNotebookEditorsShape
 
 
 	async $tryShowNotebookDocument(resource: UriComponents, viewType: string, options: INotebookDocumentShowOptions): Promise<string> {
-		const editorOptions = new NotebookEditorOptions({
+		const editorOptions: INotebookEditorOptions = {
 			cellSelections: options.selections,
 			preserveFocus: options.preserveFocus,
 			pinned: options.pinned,
@@ -142,8 +132,8 @@ export class MainThreadNotebookEditors implements MainThreadNotebookEditorsShape
 			// preserve pre 1.38 behaviour to not make group active when preserveFocus: true
 			// but make sure to restore the editor to fix https://github.com/microsoft/vscode/issues/79633
 			activation: options.preserveFocus ? EditorActivation.RESTORE : undefined,
-			override: EditorOverride.DISABLED,
-		});
+			override: EditorOverride.DISABLED
+		};
 
 		const input = NotebookEditorInput.create(this._instantiationService, URI.revive(resource), viewType);
 		const editorPane = await this._editorService.openEditor(input, editorOptions, options.position);

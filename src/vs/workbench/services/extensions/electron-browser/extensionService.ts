@@ -15,7 +15,7 @@ import { IWorkbenchExtensionEnablementService, EnablementState, IWebExtensionsSc
 import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
 import { IRemoteExtensionHostDataProvider, RemoteExtensionHost, IRemoteExtensionHostInitData } from 'vs/workbench/services/extensions/common/remoteExtensionHost';
 import { IRemoteAgentService } from 'vs/workbench/services/remote/common/remoteAgentService';
-import { IRemoteAuthorityResolverService, RemoteAuthorityResolverError, RemoteTrustOption, ResolverResult } from 'vs/platform/remote/common/remoteAuthorityResolver';
+import { IRemoteAuthorityResolverService, RemoteAuthorityResolverError, ResolverResult } from 'vs/platform/remote/common/remoteAuthorityResolver';
 import { IInstantiationService, ServicesAccessor } from 'vs/platform/instantiation/common/instantiation';
 import { ILifecycleService, LifecyclePhase } from 'vs/workbench/services/lifecycle/common/lifecycle';
 import { INotificationService, Severity } from 'vs/platform/notification/common/notification';
@@ -42,11 +42,8 @@ import { Schemas } from 'vs/base/common/network';
 import { ExtensionHostExitCode } from 'vs/workbench/services/extensions/common/extensionHostProtocol';
 import { updateProxyConfigurationsScope } from 'vs/platform/request/common/request';
 import { ConfigurationScope } from 'vs/platform/configuration/common/configurationRegistry';
-import { Codicon } from 'vs/base/common/codicons';
-import { IDialogService } from 'vs/platform/dialogs/common/dialogs';
+import { IExtensionManifestPropertiesService } from 'vs/workbench/services/extensions/common/extensionManifestPropertiesService';
 import { IWorkspaceTrustManagementService } from 'vs/platform/workspace/common/workspaceTrust';
-
-const MACHINE_PROMPT = false;
 
 export class ExtensionService extends AbstractExtensionService implements IExtensionService {
 
@@ -74,8 +71,8 @@ export class ExtensionService extends AbstractExtensionService implements IExten
 		@IRemoteExplorerService private readonly _remoteExplorerService: IRemoteExplorerService,
 		@IExtensionGalleryService private readonly _extensionGalleryService: IExtensionGalleryService,
 		@ILogService private readonly _logService: ILogService,
-		@IDialogService private readonly _dialogService: IDialogService,
 		@IWorkspaceTrustManagementService private readonly _workspaceTrustManagementService: IWorkspaceTrustManagementService,
+		@IExtensionManifestPropertiesService extensionManifestPropertiesService: IExtensionManifestPropertiesService,
 	) {
 		super(
 			new ExtensionRunningLocationClassifier(
@@ -92,6 +89,7 @@ export class ExtensionService extends AbstractExtensionService implements IExten
 			extensionManagementService,
 			contextService,
 			configurationService,
+			extensionManifestPropertiesService
 		);
 
 		this._enableLocalWebWorker = this._isLocalWebWorkerEnabled();
@@ -345,6 +343,19 @@ export class ExtensionService extends AbstractExtensionService implements IExten
 		let remoteExtensions: IExtensionDescription[] = [];
 
 		if (remoteAuthority) {
+
+			this._remoteAuthorityResolverService._setCanonicalURIProvider(async (uri) => {
+				if (uri.scheme !== Schemas.vscodeRemote || uri.authority !== remoteAuthority) {
+					// The current remote authority resolver cannot give the canonical URI for this URI
+					return uri;
+				}
+				const localProcessExtensionHost = this._getExtensionHostManager(ExtensionHostKind.LocalProcess)!;
+				return localProcessExtensionHost.getCanonicalURI(remoteAuthority, uri);
+			});
+
+			// Now that the canonical URI provider has been registered, we
+			// need to wait for the trust state to be initialized
+			await this._workspaceTrustManagementService.workspaceTrustInitialized;
 			let resolverResult: ResolverResult;
 
 			try {
@@ -363,38 +374,6 @@ export class ExtensionService extends AbstractExtensionService implements IExten
 				// Proceed with the local extension host
 				await this._startLocalExtensionHost(localExtensions);
 				return;
-			}
-
-			let promptForMachineTrust = MACHINE_PROMPT;
-
-			if (resolverResult.options?.trust === RemoteTrustOption.DisableTrust) {
-				promptForMachineTrust = false;
-				this._workspaceTrustManagementService.setWorkspaceTrust(true);
-			} else if (resolverResult.options?.trust === RemoteTrustOption.MachineTrusted) {
-				promptForMachineTrust = false;
-			}
-
-			if (promptForMachineTrust) {
-				const dialogResult = await this._dialogService.show(
-					Severity.Info,
-					nls.localize('machineTrustQuestion', "Do you trust the machine you're connecting to?"),
-					[nls.localize('yes', "Yes, connect."), nls.localize('no', "No, do not connect.")],
-					{
-						cancelId: 1,
-						custom: {
-							icon: Codicon.remoteExplorer
-						},
-						// checkbox: { label: nls.localize('remember', "Remember my choice"), checked: true }
-					}
-				);
-
-				if (dialogResult.choice !== 0) {
-					// Did not confirm trust
-					this._notificationService.notify({ severity: Severity.Warning, message: nls.localize('trustFailure', "Refused to connect to untrusted machine.") });
-					// Proceed with the local extension host
-					await this._startLocalExtensionHost(localExtensions);
-					return;
-				}
 			}
 
 			// set the resolved authority
@@ -427,6 +406,10 @@ export class ExtensionService extends AbstractExtensionService implements IExten
 			}
 
 			updateProxyConfigurationsScope(remoteEnv.useHostProxy ? ConfigurationScope.APPLICATION : ConfigurationScope.MACHINE);
+		} else {
+
+			this._remoteAuthorityResolverService._setCanonicalURIProvider(async (uri) => uri);
+
 		}
 
 		await this._startLocalExtensionHost(localExtensions, remoteAuthority, remoteEnv, remoteExtensions);
@@ -472,7 +455,7 @@ export class ExtensionService extends AbstractExtensionService implements IExten
 		}
 	}
 
-	public async override getInspectPort(tryEnableInspector: boolean): Promise<number> {
+	public override async getInspectPort(tryEnableInspector: boolean): Promise<number> {
 		const localProcessExtensionHost = this._getExtensionHostManager(ExtensionHostKind.LocalProcess);
 		if (localProcessExtensionHost) {
 			return localProcessExtensionHost.getInspectPort(tryEnableInspector);

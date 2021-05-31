@@ -47,8 +47,8 @@ import { settingsTextInputBorder } from 'vs/workbench/contrib/preferences/browse
 import { createTOCIterator, TOCTree, TOCTreeModel } from 'vs/workbench/contrib/preferences/browser/tocTree';
 import { CONTEXT_SETTINGS_EDITOR, CONTEXT_SETTINGS_ROW_FOCUS, CONTEXT_SETTINGS_SEARCH_FOCUS, CONTEXT_TOC_ROW_FOCUS, EXTENSION_SETTING_TAG, FEATURE_SETTING_TAG, ID_SETTING_TAG, IPreferencesSearchService, ISearchProvider, MODIFIED_SETTING_TAG, REQUIRE_TRUSTED_WORKSPACE_SETTING_TAG, SETTINGS_EDITOR_COMMAND_CLEAR_SEARCH_RESULTS } from 'vs/workbench/contrib/preferences/common/preferences';
 import { IEditorGroup, IEditorGroupsService } from 'vs/workbench/services/editor/common/editorGroupsService';
-import { IPreferencesService, ISearchResult, ISettingsEditorModel, ISettingsEditorOptions, SettingsEditorOptions, SettingValueType } from 'vs/workbench/services/preferences/common/preferences';
-import { SettingsEditor2Input } from 'vs/workbench/services/preferences/browser/preferencesEditorInput';
+import { validateSettingsEditorOptions, IPreferencesService, ISearchResult, ISettingsEditorModel, ISettingsEditorOptions, SettingValueType } from 'vs/workbench/services/preferences/common/preferences';
+import { SettingsEditor2Input } from 'vs/workbench/services/preferences/common/preferencesEditorInput';
 import { Settings2EditorModel } from 'vs/workbench/services/preferences/common/preferencesModels';
 import { IUserDataSyncWorkbenchService } from 'vs/workbench/services/userDataSync/common/userDataSync';
 import { preferencesClearInputIcon } from 'vs/workbench/contrib/preferences/browser/preferencesIcons';
@@ -92,7 +92,25 @@ export class SettingsEditor2 extends EditorPane {
 	private static CONFIG_SCHEMA_UPDATE_DELAYER = 500;
 
 	private static readonly SUGGESTIONS: string[] = [
-		`@${MODIFIED_SETTING_TAG}`, '@tag:usesOnlineServices', '@tag:sync', `@tag:${REQUIRE_TRUSTED_WORKSPACE_SETTING_TAG}`, `@${ID_SETTING_TAG}`, `@${EXTENSION_SETTING_TAG}`, `@${FEATURE_SETTING_TAG}scm`, `@${FEATURE_SETTING_TAG}explorer`, `@${FEATURE_SETTING_TAG}search`, `@${FEATURE_SETTING_TAG}debug`, `@${FEATURE_SETTING_TAG}extensions`, `@${FEATURE_SETTING_TAG}terminal`, `@${FEATURE_SETTING_TAG}task`, `@${FEATURE_SETTING_TAG}problems`, `@${FEATURE_SETTING_TAG}output`, `@${FEATURE_SETTING_TAG}comments`, `@${FEATURE_SETTING_TAG}remote`, `@${FEATURE_SETTING_TAG}timeline`
+		`@${MODIFIED_SETTING_TAG}`,
+		'@tag:usesOnlineServices',
+		'@tag:sync',
+		`@tag:${REQUIRE_TRUSTED_WORKSPACE_SETTING_TAG}`,
+		`@${ID_SETTING_TAG}`,
+		`@${EXTENSION_SETTING_TAG}`,
+		`@${FEATURE_SETTING_TAG}scm`,
+		`@${FEATURE_SETTING_TAG}explorer`,
+		`@${FEATURE_SETTING_TAG}search`,
+		`@${FEATURE_SETTING_TAG}debug`,
+		`@${FEATURE_SETTING_TAG}extensions`,
+		`@${FEATURE_SETTING_TAG}terminal`,
+		`@${FEATURE_SETTING_TAG}task`,
+		`@${FEATURE_SETTING_TAG}problems`,
+		`@${FEATURE_SETTING_TAG}output`,
+		`@${FEATURE_SETTING_TAG}comments`,
+		`@${FEATURE_SETTING_TAG}remote`,
+		`@${FEATURE_SETTING_TAG}timeline`,
+		`@${FEATURE_SETTING_TAG}notebook`,
 	];
 
 	private static shouldSettingUpdateFast(type: SettingValueType | SettingValueType[]): boolean {
@@ -216,7 +234,7 @@ export class SettingsEditor2 extends EditorPane {
 			this.renderTree();
 		}));
 
-		this._register(configurationService.onDidChangeUntrustdSettings(e => {
+		this._register(configurationService.onDidChangeRestrictedSettings(e => {
 			if (e.default.length) {
 				this.updateElementsByKey([...e.default]);
 			}
@@ -269,7 +287,7 @@ export class SettingsEditor2 extends EditorPane {
 		this.updateStyles();
 	}
 
-	async override setInput(input: SettingsEditor2Input, options: SettingsEditorOptions | undefined, context: IEditorOpenContext, token: CancellationToken): Promise<void> {
+	override async setInput(input: SettingsEditor2Input, options: ISettingsEditorOptions | undefined, context: IEditorOpenContext, token: CancellationToken): Promise<void> {
 		this.inSettingsEditorContextKey.set(true);
 		await super.setInput(input, options, context, token);
 		await timeout(0); // Force setInput to be async
@@ -290,7 +308,7 @@ export class SettingsEditor2 extends EditorPane {
 		}));
 		this.defaultSettingsEditorModel = model;
 
-		options = options || SettingsEditorOptions.create({});
+		options = options || validateSettingsEditorOptions({});
 		if (!this.viewState.settingsTarget) {
 			if (!options.target) {
 				options.target = ConfigurationTarget.USER_LOCAL;
@@ -329,7 +347,7 @@ export class SettingsEditor2 extends EditorPane {
 		return withUndefinedAsNull(cachedState);
 	}
 
-	override setOptions(options: SettingsEditorOptions | undefined): void {
+	override setOptions(options: ISettingsEditorOptions | undefined): void {
 		super.setOptions(options);
 
 		if (options) {
@@ -337,8 +355,9 @@ export class SettingsEditor2 extends EditorPane {
 		}
 	}
 
-	private _setOptions(options: SettingsEditorOptions): void {
-		if (options.focusSearch) {
+	private _setOptions(options: ISettingsEditorOptions): void {
+		if (options.focusSearch && !platform.isIOS) {
+			// isIOS - #122044
 			this.focusSearch();
 		}
 
@@ -378,7 +397,10 @@ export class SettingsEditor2 extends EditorPane {
 
 	override focus(): void {
 		if (this._currentFocusContext === SettingsFocusContext.Search) {
-			this.focusSearch();
+			if (!platform.isIOS) {
+				// #122044
+				this.focusSearch();
+			}
 		} else if (this._currentFocusContext === SettingsFocusContext.SettingControl) {
 			const element = this.focusedSettingDOMElement;
 			if (element) {
@@ -927,7 +949,6 @@ export class SettingsEditor2 extends EditorPane {
 
 		const data = {
 			key: props.key,
-			query: props.query,
 			groupId,
 			nlpIndex,
 			displayIndex,
@@ -939,7 +960,6 @@ export class SettingsEditor2 extends EditorPane {
 		/* __GDPR__
 			"settingsEditor.settingModified" : {
 				"key" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" },
-				"query" : { "classification": "CustomerContent", "purpose": "FeatureInsight" },
 				"groupId" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" },
 				"nlpIndex" : { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true },
 				"displayIndex" : { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true },
@@ -1262,7 +1282,6 @@ export class SettingsEditor2 extends EditorPane {
 		const requestCount = nlpMetadata && nlpMetadata.requestCount;
 
 		const data = {
-			query,
 			durations,
 			counts,
 			requestCount
@@ -1270,7 +1289,6 @@ export class SettingsEditor2 extends EditorPane {
 
 		/* __GDPR__
 			"settingsEditor.filter" : {
-				"query": { "classification": "CustomerContent", "purpose": "FeatureInsight" },
 				"durations.nlpResult" : { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true },
 				"counts.nlpResult" : { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true },
 				"counts.filterResult" : { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true },

@@ -51,9 +51,6 @@ export class NativeWorkbenchEnvironmentService extends AbstractNativeEnvironment
 	get machineId() { return this.configuration.machineId; }
 
 	@memoize
-	get sessionId() { return this.configuration.sessionId; }
-
-	@memoize
 	get remoteAuthority() { return this.configuration.remoteAuthority; }
 
 	@memoize
@@ -70,21 +67,6 @@ export class NativeWorkbenchEnvironmentService extends AbstractNativeEnvironment
 
 	@memoize
 	get webviewExternalEndpoint(): string { return `${Schemas.vscodeWebview}://{{uuid}}`; }
-
-	@memoize
-	get webviewResourceRoot(): string {
-		// On desktop, this endpoint is only used for the service worker to identify resource loads and
-		// should never actually be requested.
-		//
-		// Required due to https://github.com/electron/electron/issues/28528
-		return 'https://{{uuid}}.vscode-webview-test.com/vscode-resource/{{resource}}';
-	}
-
-	@memoize
-	get webviewCspSource(): string {
-		const uri = URI.parse(this.webviewResourceRoot.replace('{{uuid}}', '*'));
-		return `${uri.scheme}://${uri.authority}`;
-	}
 
 	@memoize
 	get skipReleaseNotes(): boolean { return !!this.args['skip-release-notes']; }

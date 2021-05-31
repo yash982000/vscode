@@ -497,10 +497,14 @@ export class TernarySearchTree<K, V> {
 		yield* this._entries(this._root);
 	}
 
-	private *_entries(node: TernarySearchTreeNode<K, V> | undefined): IterableIterator<[K, V]> {
+	private *_entries(node: TernarySearchTreeNode<K, V> | undefined, i: number = 0): IterableIterator<[K, V]> {
+		if (i > 5000) {
+			console.log('potential CYCLE detected', new Error().stack);
+			return;
+		}
 		if (node) {
 			// left
-			yield* this._entries(node.left);
+			yield* this._entries(node.left, i++);
 
 			// node
 			if (node.value) {
@@ -508,10 +512,10 @@ export class TernarySearchTree<K, V> {
 				yield [node.key, node.value];
 			}
 			// mid
-			yield* this._entries(node.mid);
+			yield* this._entries(node.mid, i++);
 
 			// right
-			yield* this._entries(node.right);
+			yield* this._entries(node.right, i++);
 		}
 	}
 }
@@ -887,7 +891,7 @@ export class LinkedMap<K, V> implements Map<K, V> {
 			this._tail = undefined;
 		}
 		else if (item === this._head) {
-			// This can only happend if size === 1 which is handle
+			// This can only happen if size === 1 which is handled
 			// by the case above.
 			if (!item.next) {
 				throw new Error('Invalid list');
@@ -896,7 +900,7 @@ export class LinkedMap<K, V> implements Map<K, V> {
 			this._head = item.next;
 		}
 		else if (item === this._tail) {
-			// This can only happend if size === 1 which is handle
+			// This can only happen if size === 1 which is handled
 			// by the case above.
 			if (!item.previous) {
 				throw new Error('Invalid list');

@@ -57,17 +57,6 @@ class NotebookEditorCellEditBuilder implements vscode.NotebookEditorEdit {
 		});
 	}
 
-	replaceCellOutput(index: number, outputs: vscode.NotebookCellOutput[]): void {
-		this._throwIfFinalized();
-		this._collectedEdits.push({
-			editType: CellEditType.Output,
-			index,
-			outputs: outputs.map(output => {
-				return extHostConverter.NotebookCellOutput.from(output);
-			})
-		});
-	}
-
 	replaceCells(from: number, to: number, cells: vscode.NotebookCellData[]): void {
 		this._throwIfFinalized();
 		if (from === to && cells.length === 0) {
@@ -84,13 +73,13 @@ class NotebookEditorCellEditBuilder implements vscode.NotebookEditorEdit {
 
 export class ExtHostNotebookEditor {
 
+	public static readonly apiEditorsToExtHost = new WeakMap<vscode.NotebookEditor, ExtHostNotebookEditor>();
+
 	private _selections: vscode.NotebookRange[] = [];
 	private _visibleRanges: vscode.NotebookRange[] = [];
 	private _viewColumn?: vscode.ViewColumn;
 
 	private _visible: boolean = false;
-	private _kernel?: vscode.NotebookKernel;
-
 	private readonly _hasDecorationsForKey = new Set<string>();
 
 	private _editor?: vscode.NotebookEditor;
@@ -113,7 +102,7 @@ export class ExtHostNotebookEditor {
 			const that = this;
 			this._editor = {
 				get document() {
-					return that.notebookData.notebookDocument;
+					return that.notebookData.apiNotebook;
 				},
 				get selections() {
 					return that._selections;
@@ -136,19 +125,14 @@ export class ExtHostNotebookEditor {
 					callback(edit);
 					return that._applyEdit(edit.finalize());
 				},
-				get kernel() {
-					return that._kernel;
-				},
 				setDecorations(decorationType, range) {
 					return that.setDecorations(decorationType, range);
 				}
 			};
+
+			ExtHostNotebookEditor.apiEditorsToExtHost.set(this._editor, this);
 		}
 		return this._editor;
-	}
-
-	_acceptKernel(kernel?: vscode.NotebookKernel) {
-		this._kernel = kernel;
 	}
 
 	get visible(): boolean {
